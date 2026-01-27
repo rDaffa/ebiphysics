@@ -18,7 +18,8 @@ import (
 	"fmt"
 	"image/color"
 	"log"
-	"math/rand/v2"
+	"math/rand"
+	"time"
 
 	"github.com/ebitengine/debugui"
 
@@ -99,18 +100,19 @@ func (e *Ecs) queryEntityName(name string) Component {
 	return c
 }
 
-func randRange(min, max int) int {
-	return rand.IntN(max-min) + min
-}
-
 func (g *Game) DrawOnGrid(screen *ebiten.Image) {
 	for i := range g.ecs.Table {
 		partPos := g.ecs.Table[i].components.position
-		if g.tick%60 == 0 {
-			partPos.y = partPos.y + randRange(-1, 1)
-			partPos.x += partPos.x + randRange(-1, 1)
+		//		if g.tick%10 == 0 {
+		max := 5
+		min := -5
+		ry := rand.New(rand.NewSource(time.Now().UnixNano()))
+		partPos.y = partPos.y + ry.Intn(max-min+1) + min
 
-		}
+		rx := rand.New(rand.NewSource(time.Now().UnixNano() + 2))
+		partPos.x = partPos.x + rx.Intn(max-min+1) + min
+
+		//		}
 
 		vector.FillCircle(screen, float32(partPos.x), float32(partPos.y),
 			cellSizepx, color.RGBA{0xff, 0, 0, 0xff}, g.aa)
@@ -167,7 +169,7 @@ func initParticles() Ecs {
 	e := Ecs{}
 	for range 100 {
 		visibility := true
-		position := Pos{rand.IntN(screenWidth), rand.IntN(screenHeight)}
+		position := Pos{rand.Intn(screenWidth), rand.Intn(screenHeight)}
 		e.addEntity(Component{
 			visible:  &visibility,
 			position: &position,
