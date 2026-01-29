@@ -49,14 +49,19 @@ type Entity struct {
 	id int
 }
 type Component struct {
-	name      *string
-	visible   *bool
-	position  *Pos
-	mass      *float32
-	inventory *[]Material
-	balances  *[]Account
+	name            *string
+	visible         *bool
+	position        *Pos
+	mass            *float32
+	velocity        *Velocity
+	collisionRadius *int
+	borderLine      *BorderLine
 }
-type velocity struct {
+type BorderLine struct {
+	start Pos
+	end   Pos
+}
+type Velocity struct {
 	speed     float32
 	direction Pos
 }
@@ -64,35 +69,28 @@ type Pos struct {
 	x int
 	y int
 }
-type Material struct {
-	name string
-	qty  int
-}
-type Account struct {
-	name string
-	qty  int
-}
-type Row struct {
+
+type EntityRow struct {
 	entity     Entity
 	components Component
 }
 
 type Ecs struct {
-	Table []Row
+	Entities []EntityRow
 }
 
 func (e *Ecs) addEntity(c Component) {
 	// add a row to the ecs table
-	EntityId := len(e.Table) + 1
+	EntityId := len(e.Entities) + 1
 	newEntity := Entity{EntityId}
-	e.Table = append(e.Table, Row{newEntity, c})
+	e.Entities = append(e.Entities, EntityRow{newEntity, c})
 }
 
 func (e *Ecs) queryEntityName(name string) Component {
 	var c Component
-	for i := range e.Table {
-		if name == *e.Table[i].components.name {
-			c = e.Table[i].components
+	for i := range e.Entities {
+		if name == *e.Entities[i].components.name {
+			c = e.Entities[i].components
 		} else {
 			c = Component{}
 		}
@@ -100,25 +98,41 @@ func (e *Ecs) queryEntityName(name string) Component {
 	return c
 }
 
-func (g *Game) DrawOnGrid(screen *ebiten.Image) {
-	for i := range g.ecs.Table {
-		partPos := g.ecs.Table[i].components.position
-		//		if g.tick%10 == 0 {
-		max := 5
-		min := -5
-		ry := rand.New(rand.NewSource(time.Now().UnixNano()))
-		partPos.y = partPos.y + ry.Intn(max-min+1) + min
+// to do make filter function for entities
 
-		rx := rand.New(rand.NewSource(time.Now().UnixNano() + 2))
-		partPos.x = partPos.x + rx.Intn(max-min+1) + min
+func randNum(min, max int, salt int64) int {
+	rnd := rand.New(rand.NewSource(
+		time.Now().UnixNano() + salt))
+	return rnd.Intn(max-min+1) + min
+}
 
-		//		}
-
-		vector.FillCircle(screen, float32(partPos.x), float32(partPos.y),
-			cellSizepx, color.RGBA{0xff, 0, 0, 0xff}, g.aa)
-
-		g.ecs.Table[i].components.position = partPos
+func checkCollision(ents []EntityRow) {
+	for i := range ents {
+		if ents[i].components.mass != nil &&
+			ents[i].components.velocity != nil &&
+			ents[i].components.collisionRadius != nil {
+		}
 	}
+}
+
+func move(g Game, screen *ebiten.Image, ents []EntityRow) {
+	for i := range ents {
+		if *ents[i].components.visible == true &&
+			ents[i].components.velocity != nil {
+			pos := ents[i].components.position
+			pos.x += ents[i].components.velocity.direction.x * int(ents[i].components.velocity.speed)
+			pos.y += ents[i].components.velocity.direction.y * int(ents[i].components.velocity.speed)
+			vector.FillCircle(screen, float32(pos.x), float32(pos.y),
+				cellSizepx, color.RGBA{0xff, 0, 0, 0xff}, g.aa)
+
+			ents[i].components.position = pos
+
+		}
+	}
+}
+
+func (g *Game) DrawOnGrid(screen *ebiten.Image) {
+	move(*g, screen, g.ecs.Entities)
 }
 
 func (g *Game) Update() error {
@@ -167,14 +181,53 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func initParticles() Ecs {
 	e := Ecs{}
-	for range 100 {
+	for i := range 100 {
 		visibility := true
 		position := Pos{rand.Intn(screenWidth), rand.Intn(screenHeight)}
+		velocity := Velocity{2, Pos{randNum(-1, 1, int64(1+i)), randNum(-1, 1, int64(3*i))}}
 		e.addEntity(Component{
 			visible:  &visibility,
 			position: &position,
+			velocity: &velocity,
 		})
 	}
+	name := "left wall"
+	line := BorderLine{
+		Pos{0, 0},
+		Pos{0, screenHeight},
+	}
+	e.addEntity(Component{
+		name:       &name,
+		borderLine: &line,
+	})
+	name = "right wall"
+	line = BorderLine{
+		Pos{screenWidth, 0},
+		Pos{screenWidth, screenHeight},
+	}
+	e.addEntity(Component{
+		name:       &name,
+		borderLine: &line,
+	})
+	name = "top wall"
+	line = BorderLine{
+		Pos{0, 0},
+		Pos{screenWidth, 0},
+	}
+	e.addEntity(Component{
+		name:       &name,
+		borderLine: &line,
+	})
+	name = "bottom wall"
+	line = BorderLine{
+		Pos{0, screenHeight},
+		Pos{screenWidth, screenHeight},
+	}
+	e.addEntity(Component{
+		name:       &name,
+		borderLine: &line,
+	})
+
 	return e
 }
 
