@@ -79,11 +79,17 @@ type Ecs struct {
 	Entities []EntityRow
 }
 
-func (e *Ecs) addEntity(c Component) {
+type system struct {
+	particleMotion *ParticleMotion
+}
+type ParticleMotion struct{}
+
+func (e *Ecs) addEntity(c Component) error {
 	// add a row to the ecs table
 	EntityId := len(e.Entities) + 1
 	newEntity := Entity{EntityId}
 	e.Entities = append(e.Entities, EntityRow{newEntity, c})
+	return nil
 }
 
 func (e *Ecs) queryEntityName(name string) Component {
@@ -106,33 +112,45 @@ func randNum(min, max int, salt int64) int {
 	return rnd.Intn(max-min+1) + min
 }
 
-func checkCollision(ents []EntityRow) {
+/*
+	func checkCollision(ents []EntityRow) {
+		for i := range ents {
+			if ents[i].components.mass != nil &&
+				ents[i].components.velocity != nil &&
+				ents[i].components.collisionRadius != nil {
+			}
+		}
+	}
+*/
+func (g *Game) drawLoop(screen *ebiten.Image) {
+	ents := g.ecs.Entities
+
 	for i := range ents {
-		if ents[i].components.mass != nil &&
-			ents[i].components.velocity != nil &&
-			ents[i].components.collisionRadius != nil {
+		moveEntities(ents[i].components)
+		drawEntities(screen, ents[i].components)
+	}
+}
+
+func moveEntities(c Component) {
+	if c.visible != nil &&
+		c.velocity != nil &&
+		c.name != nil {
+		if *c.name == "particle" {
+			c.position.x += c.velocity.direction.x * int(c.velocity.speed)
+			c.position.y += c.velocity.direction.y * int(c.velocity.speed)
 		}
 	}
 }
 
-func move(g Game, screen *ebiten.Image, ents []EntityRow) {
-	for i := range ents {
-		if *ents[i].components.visible == true &&
-			ents[i].components.velocity != nil {
-			pos := ents[i].components.position
-			pos.x += ents[i].components.velocity.direction.x * int(ents[i].components.velocity.speed)
-			pos.y += ents[i].components.velocity.direction.y * int(ents[i].components.velocity.speed)
-			vector.FillCircle(screen, float32(pos.x), float32(pos.y),
-				cellSizepx, color.RGBA{0xff, 0, 0, 0xff}, g.aa)
-
-			ents[i].components.position = pos
-
+func drawEntities(s *ebiten.Image, c Component) {
+	if c.visible != nil &&
+		c.velocity != nil &&
+		c.name != nil {
+		if *c.name == "particle" {
+			vector.FillCircle(s, float32(c.position.x), float32(c.position.y),
+				cellSizepx, color.RGBA{0xff, 0, 0, 0xff}, true)
 		}
 	}
-}
-
-func (g *Game) DrawOnGrid(screen *ebiten.Image) {
-	move(*g, screen, g.ecs.Entities)
 }
 
 func (g *Game) Update() error {
@@ -166,9 +184,7 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.DrawImage(g.canvasImage, nil)
 	msg := fmt.Sprintf("(%d, %d)", g.cursor.x, g.cursor.y)
-
-	g.DrawOnGrid(screen)
-	// g.ViewGrid(target)
+	g.drawLoop(screen)
 	// g.debugui.Draw(screen)
 
 	ebitenutil.DebugPrint(screen, msg)
@@ -185,21 +201,31 @@ func initParticles() Ecs {
 		visibility := true
 		position := Pos{rand.Intn(screenWidth), rand.Intn(screenHeight)}
 		velocity := Velocity{2, Pos{randNum(-1, 1, int64(1+i)), randNum(-1, 1, int64(3*i))}}
-		e.addEntity(Component{
+		name := "particle"
+		err := e.addEntity(Component{
+			name:     &name,
 			visible:  &visibility,
 			position: &position,
 			velocity: &velocity,
 		})
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+
 	name := "left wall"
 	line := BorderLine{
 		Pos{0, 0},
 		Pos{0, screenHeight},
 	}
-	e.addEntity(Component{
+	err := e.addEntity(Component{
 		name:       &name,
 		borderLine: &line,
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	name = "right wall"
 	line = BorderLine{
 		Pos{screenWidth, 0},
@@ -236,6 +262,7 @@ func NewGame() *Game {
 		canvasImage: ebiten.NewImage(screenWidth, screenHeight),
 		ecs:         initParticles(),
 	}
+
 	g.canvasImage.Fill(color.White)
 
 	return g
@@ -245,6 +272,7 @@ func main() {
 	g := NewGame()
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("Lines (Ebitengine Demo)")
+
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
